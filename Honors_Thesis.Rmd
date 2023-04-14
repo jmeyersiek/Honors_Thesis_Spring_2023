@@ -1,0 +1,385 @@
+---
+title: "Honors Thesis"
+author: "Julia Meyersiek"
+date: "2023-04-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(Matrix)
+install.packages("lme4")
+library(lme4)
+install.packages("glmmTMB")
+install.packages('TMB', type = 'source')
+library("glmmTMB")
+install.packages("performance")
+library(performance)
+```
+
+```{r}
+install.packages("survival")
+install.packages("survminer")
+install.packages("ggpubr")
+install.packages("ggplot2")
+install.packages("tidyselect")
+library(survival)
+library(ggplot2)
+library(ggpubr)
+library(survminer)
+```
+
+```{r}
+#count data for yes and maybe
+library(curl)
+c = curl("https://raw.githubusercontent.com/butterfliesrcool/Density_Dependent_Dynamics/main/density_dependence_count_yes_maybe.csv")
+ym_count = read.csv(c, header = TRUE, sep = ",")
+head(ym_count)
+```
+
+```{r}
+#make experimental_day variable factor for ym_count
+class(ym_count$experiment_day)
+ym_count$experiment_day = as.factor(ym_count$experiment_day) #reading as factors
+class(ym_count$experiment_day)
+
+#make field_day variable factor
+class(ym_count$field_day)
+ym_count$field_day = as.factor(ym_count$field_day)
+class(ym_count$field_day)
+
+#make site variable factor
+class(ym_count$site)
+ym_count$site = as.factor(ym_count$site)
+class(ym_count$site)
+
+#make sure attack variable is integer
+class(ym_count$attacks) #this is the only thing that is read as int
+
+#make species variable factor
+class(ym_count$species)
+ym_count$species = as.factor(ym_count$species)
+class(ym_count$species)
+
+#make treatment variable factor
+class(ym_count$week)
+ym_count$week = as.factor(ym_count$week)
+class(ym_count$week)
+
+#histogram of attacks
+hist(ym_count$attacks) #concerns about zero inflation based on histogram? <-- what does this mean?
+```
+
+```{r}
+#check variance and mean to assess for over / under - dispersion
+var(ym_count$attacks)
+mean(ym_count$attacks) #variance is greater than mean, which indicates that over-dispersion might be an issue
+```
+```{r}
+#summarizing attacks
+aggregate(x=ym_count$attacks, by = list(ym_count$species, ym_count$experiment, ym_count$week), FUN=sum)
+```
+
+
+```{r}
+mod1 <- glmmTMB(attacks ~ experiment_day*species + week*species + (1|site) + (1|field_day), data=ym_count,ziformula=~1,family=poisson) 
+summary(mod1)
+```
+```{r}
+check_singularity(mod1)
+#singularity issues, likely due to the field.day random effect variable
+```
+```{r}
+install.packages("DHARMa")
+library(DHARMa)
+```
+
+```{r}
+vignette("DHARMa", package="DHARMa") #checking residuals/model assumptions
+```
+
+```{r}
+mod1simulation = simulateResiduals(fittedModel = mod1, plot = T)
+```
+
+```{r}
+testUniformity(mod1simulation)
+```
+
+```{r}
+testOutliers(mod1simulation)
+```
+
+```{r}
+testDispersion(mod1simulation)
+```
+
+```{r}
+testZeroInflation(mod1simulation)
+```
+```{r}
+install.packages("emmeans")
+library(emmeans)
+```
+
+```{r}
+post.hoc1 = emmeans(mod1, pairwise ~ species|week)
+#there is a significant different in the attack rates on junonia and limenitis only in the zero week treatment (simulatenous presentation)
+post.hoc1
+```
+
+
+```{r}
+#count data for yes
+p <- curl("https://raw.githubusercontent.com/butterfliesrcool/Density_Dependent_Dynamics/main/density_dependence_count_yes.csv")
+y_count <- read.csv(p, header = TRUE, sep = ",")
+head(y_count)
+```
+
+```{r echo=TRUE}
+# make experimental_day variable factor 
+class(y_count$experiment_day) 
+y_count$experiment_day <- as.factor(y_count$experiment_day)
+class(y_count$experiment_day)
+
+# make field_day variable factor
+class(y_count$field_day) 
+y_count$field_day <- as.factor(y_count$field_day)
+class(y_count$field_day)
+
+# make site variable factor 
+class(y_count$site)
+y_count$site <- as.factor(y_count$site)
+class(y_count$site)
+
+# make sure attack variable is integer 
+class(y_count$attacks) # only thing that should be an integer 
+
+# make species variable factor 
+class(y_count$species)
+y_count$species <- as.factor(y_count$species)
+class(y_count$species)
+
+# make treatment variable factor 
+class(y_count$week)
+y_count$week <- as.factor(y_count$week)
+class(y_count$week)
+```
+```{r}
+# histogram of attacks 
+hist(y_count$attacks)  #concerns about zero inflation based on histogram? 
+
+# check variance and mean to assess for over /  under - dispersion 
+var(y_count$attacks)
+mean(y_count$attacks) # variance is greater than mean, which indicates that over-dispersion might be an issue 
+```
+
+```{r}
+#summarizing attacks for yes
+aggregate(x=y_count$attacks, by=list(y_count$species, y_count$experiment, y_count$week), FUN=sum)
+```
+
+```{r}
+mod2 <- glmmTMB(attacks ~ experiment_day*species + week*species + (1|site) + (1|field_day), data=y_count,ziformula=~1,family=poisson) 
+summary(mod2)
+check_singularity(mod2) 
+# singularity issues, likely due to the field.day random effect variable 
+```
+
+```{r}
+mod2simulation <- simulateResiduals(fittedModel = mod2, plot = T)
+testUniformity(mod2simulation) 
+testOutliers(mod2simulation)
+testDispersion(mod2simulation) 
+testZeroInflation(mod2simulation) 
+```
+
+```{r}
+post.hoc2 <- emmeans(mod2, pairwise ~ species|week) 
+post.hoc2
+```
+
+```{r}
+#count data for binomial
+b <- curl("https://raw.githubusercontent.com/butterfliesrcool/Density_Dependent_Dynamics/main/density_dependence_binomial.csv")
+binomial <- read.csv(b, header = TRUE, sep = ",", na.strings=c("","NA"))
+binomial[is.na(binomial)] <- "N" 
+head(binomial)
+```
+
+```{r}
+#summarizing attacks for binomial
+aggregate(x=binomial$attacks, by= list(binomial$species, binomial$experiment, binomial$week), FUN=sum)
+```
+
+```{r}
+yes <- subset(binomial, confidence %in% c("Y", "N"))
+LD <- subset(yes, experiment == "low_density")
+HD <- subset(yes, experiment == "high_density")
+```
+
+```{r}
+library(ggplot2)
+library(survival)
+library(survminer)
+coxph(Surv(experiment_day, attacks) ~ species, data = LD)
+coxph(Surv(experiment_day, attacks) ~ species, data = HD)
+```
+
+
+
+```{r}
+survival <- survfit(Surv(experiment_day, attacks) ~ species, data = LD)
+plot(survival, 
+     xlab = "days",
+     ylab = "facsimiles survival")
+
+segments(35, .372, 40, .372, col = c("green"), lwd = 3)
+segments(35, .104, 40, .104, col = c("blue"), lwd = 3)
+```
+```{r}
+survival <- survfit(Surv(experiment_day, attacks) ~ species, data = HD)
+plot(survival, 
+     xlab = "days",
+     ylab = "facsimiles survival")
+
+segments(35, .372, 40, .372, col = c("green"), lwd = 3)
+segments(35, .104, 40, .104, col = c("blue"), lwd = 3)
+```
+
+
+
+
+
+
+
+```{r}
+#week 1 low density survivorship
+Wk1 <- subset(binomial, week == "1")
+Wk1LD <- subset(Wk1, experiment == "low_density")
+Wk1LD_model <- survfit(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=Wk1LD)
+Wk1LD_model
+```
+```{r}
+summary(Wk1LD_model)
+```
+
+```{r}
+#week 1 high density survivorship
+Wk1HD <- subset(Wk1, experiment == "high_density")
+Wk1HD_model <- survfit(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=Wk1HD)
+Wk1HD_model
+```
+```{r}
+summary(Wk1HD_model)
+```
+
+```{r}
+#week 2 low density survivorship
+Wk2 <- subset(binomial, week == "2")
+Wk2LD <- subset(Wk2, experiment == "low_density")
+Wk2LD_model <- survfit(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=Wk2LD)
+Wk2LD_model
+```
+```{r}
+summary(Wk2LD_model)
+```
+
+```{r}
+#week 2 high density survivorship
+Wk2HD <- subset(Wk2, experiment == "high_density")
+Wk2HD_model <- survfit(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=Wk2HD)
+Wk2HD_model
+```
+```{r}
+summary(Wk2HD_model)
+```
+
+```{r}
+#Susan's data applied to Costa Rica data
+p <- curl("https://raw.githubusercontent.com/butterfliesrcool/Density_Dependent_Dynamics/main/density_dependence_binomial.csv")
+binomial.data  <- read.csv(p, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+```
+
+```{r}
+#Week 1 LD Cox proportional-hazards regression model 
+coxph(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=Wk1LD)
+```
+
+```{r}
+#Week 1 HD Cox proportional-hazards regression model
+coxph(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=Wk1HD)
+```
+
+```{r}
+#Week 2 LD Cox proportional-hazards regression model
+coxph(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=Wk2LD)
+```
+
+```{r}
+#Week 2 HD Cox proportional-hazards regression model
+coxph(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=Wk2HD)
+```
+
+```{r}
+ji <- subset(binomial.data, species %in% c("junonia", "iphiclus"), drop = FALSE)
+si <- subset(binomial.data, species %in% c("serpa", "iphiclus"), drop = FALSE)
+sj <- subset(binomial.data, species %in% c("serpa", "junonia"), drop = FALSE)
+```
+
+```{r}
+#iphiclus-junonia comparison (significant)
+coxph(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=ji)
+```
+
+```{r}
+#iphiclus-serpa comparison (significant)
+coxph(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=si)
+```
+
+```{r}
+#serpa-junonia comparison (not significant)
+coxph(Surv(experiment_day, experiment_day+1, attacks) ~ species, data=sj)
+```
+
+```{r}
+#While Finkbeiner did not report using the pairwise_survdiff() function in her publication, this is another possibly easier way to generate pairwise comparisons in the survival differences between species. (significant + not significant)
+survdiff(Surv(experiment_day, attacks) ~ species, data=binomial.data)
+pairwise_survdiff(Surv(experiment_day, attacks) ~ species, p.adjust.method = "BH",
+     data = binomial.data)
+```
+
+
+```{r}
+#Week 1 LD plot
+plot(Wk1LD_model, xlab="Time (days)",
+     ylab="Survivorship",
+     ylim = c(0.94, 1.0),
+     xlim = c(1, 5))
+```
+```{r}
+#Week 1 HD plot
+plot(Wk1HD_model, xlab="Time (days)",
+     ylab="Survivorship",
+     ylim = c(0.94, 1.0),
+     xlim = c(1, 5))
+```
+
+```{r}
+#Week 2 LD plot
+plot(Wk2LD_model, xlab="Time (days)",
+     ylab="Survivorship",
+     ylim = c(0.94, 1.0),
+     xlim = c(1, 5))
+```
+
+```{r}
+#Week 2 HD plot
+plot(Wk2HD_model, xlab="Time (days)",
+     ylab="Survivorship",
+     ylim = c(0.94, 1.0),
+     xlim = c(1, 5))
+```
